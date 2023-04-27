@@ -34,6 +34,7 @@ def hello():
         if max_cluster_size < np.sum(y_pred == i):
             max_cluster = i
             max_cluster_size = np.sum(y_pred == i)
+
     min_dist = np.inf
     min_dist_col = 0
     max_cluster = np.argmax(np.bincount(model.labels_))
@@ -50,3 +51,7 @@ def hello():
     )
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
+
+
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=5000, threaded=True)

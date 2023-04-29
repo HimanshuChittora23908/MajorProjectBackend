@@ -109,7 +109,23 @@ def labelTrue():
     global labels
     print(labels)
     graph_id = request.args.get("graph_id")
-    labels[int(graph_id)] = 1
+    labels[int(graph_id)] = 1 # labelling true
+    response = jsonify(
+        {
+            "success": True,
+        }
+    )
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    print(labels)
+    return response
+
+
+@app.route("/labelFalse", methods=["GET"])
+def labelFalse():
+    global labels
+    print(labels)
+    graph_id = request.args.get("graph_id")
+    labels[int(graph_id)] = 0 # labelling false
     response = jsonify(
         {
             "success": True,

@@ -8,22 +8,26 @@ from statistics import mode
 
 app = Flask(__name__)
 
+model = None
+series = None
+N_CLUSTERS = 8
+
 
 @app.route("/upload", methods=["POST"])
 def hello():
+    global model
+    global series
+    global N_CLUSTERS
+
     # Receive the data from the client where content-type is multipart/form-data
     data = request.files["file"]
     data = pd.read_csv(data, sep=",")
     data = data.iloc[:, :]
     data = np.array(data, dtype="float32")
-    ROI_L = 0
-    ROI_R = 0
-    series = data[:, 1:16000]
-    N_CLUSTERS = 8
+    series = data[:, 1:]
     model = TimeSeriesKMeans(
         n_clusters=N_CLUSTERS,
         metric="euclidean",
-        max_iter=50,
         random_state=41,
         init="random",
     )
@@ -36,22 +40,45 @@ def hello():
             max_cluster_size = np.sum(y_pred == i)
 
     min_dist = np.inf
-    min_dist_col = 0
+    min_dist_row = 0
     max_cluster = np.argmax(np.bincount(model.labels_))
-    for i in range(series.shape[1]):
-        dist = np.linalg.norm(series[:, i] - model.cluster_centers_[max_cluster])
-        if dist < min_dist:
-            min_dist = dist
-            min_dist_col = i
+    for i in range(series.shape[0]):
+        if model.labels_[i] == max_cluster:
+            dist = np.linalg.norm(series[i] - model.cluster_centers_[max_cluster])
+            if dist < min_dist:
+                min_dist = dist
+                min_dist_row = i
 
     response = jsonify(
         {
-            "expected_graph": min_dist_col,
+            "expected_graph": min_dist_row,
         }
     )
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
 
-if __name__ == '__main__':
+@app.route("/getFarthestGraph", methods=["GET"])
+def getFarthestGraph():
+    max_dist = 0
+    max_dist_row = 0
+    graph_id = request.args.get("graph_id")
+    max_cluster = np.argmax(np.bincount(model.labels_))
+    for i in range(series.shape[0]):
+        if model.labels_[i] == int(graph_id):
+            dist = np.linalg.norm(series[i] - model.cluster_centers_[max_cluster])
+            if dist > max_dist:
+                max_dist = dist
+                max_dist_row = i
+
+    response = jsonify(
+        {
+            "farthest_graph": max_dist_row,
+        }
+    )
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    return response
+
+
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, threaded=True)

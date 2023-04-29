@@ -11,6 +11,8 @@ app = Flask(__name__)
 model = None
 series = None
 N_CLUSTERS = 8
+# Create an array named labels to store the labels of the clusters
+labels = np.zeros(N_CLUSTERS, dtype="int32")
 
 
 @app.route("/upload", methods=["POST"])
@@ -77,6 +79,44 @@ def getFarthestGraph():
         }
     )
     response.headers.add("Access-Control-Allow-Origin", "*")
+    return response
+
+
+@app.route("/getClosestGraph", methods=["GET"])
+def getClosestGraph():
+    min_dist = np.inf
+    min_dist_row = 0
+    graph_id = request.args.get("graph_id")
+    max_cluster = np.argmax(np.bincount(model.labels_))
+    for i in range(series.shape[0]):
+        if model.labels_[i] == int(graph_id):
+            dist = np.linalg.norm(series[i] - model.cluster_centers_[max_cluster])
+            if dist < min_dist:
+                min_dist = dist
+                min_dist_row = i
+
+    response = jsonify(
+        {
+            "closest_graph": min_dist_row,
+        }
+    )
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    return response
+
+
+@app.route("/labelTrue", methods=["GET"])
+def labelTrue():
+    global labels
+    print(labels)
+    graph_id = request.args.get("graph_id")
+    labels[int(graph_id)] = 1
+    response = jsonify(
+        {
+            "success": True,
+        }
+    )
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    print(labels)
     return response
 
 

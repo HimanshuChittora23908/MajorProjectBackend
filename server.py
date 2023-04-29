@@ -10,6 +10,7 @@ app = Flask(__name__)
 
 model = None
 series = None
+cluster_series = None
 N_CLUSTERS = 8
 # Create an array named labels to store the labels of the clusters
 labels = np.zeros(N_CLUSTERS, dtype="int32")
@@ -58,6 +59,50 @@ def hello():
     )
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
+
+@app.route("/furtherCluster", methods=["POST"])
+def furtherCluster():
+    global model
+    global series
+    global cluster_series
+
+    # receive integer parameter from request
+    cluster_no = request.args.get("cluster_no")
+
+    # further cluster the cluster represented by cluster_no into 2 clusters
+    cluster_series = series[model.labels_ == int(cluster_no)]
+    cluster_model = TimeSeriesKMeans(
+        n_clusters=2,
+        metric="euclidean",
+        random_state=41,
+        init="random",
+    )
+    cluster_y_pred = cluster_model.fit_predict(cluster_series)
+    max_cluster = 0
+    max_cluster_size = 0
+    for i in range(2):
+        if max_cluster_size < np.sum(cluster_y_pred == i):
+            max_cluster = i
+            max_cluster_size = np.sum(cluster_y_pred == i)
+
+    min_dist = np.inf
+    min_dist_row = 0
+    max_cluster = np.argmax(np.bincount(cluster_model.labels_))
+    for i in range(cluster_series.shape[0]):
+        if cluster_model.labels_[i] == max_cluster:
+            dist = np.linalg.norm(cluster_series[i] - cluster_model.cluster_centers_[max_cluster])
+            if dist < min_dist:
+                min_dist = dist
+                min_dist_row = i
+
+    response = jsonify(
+        {
+            "expected_graph": min_dist_row,
+        }
+    )
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    return response
+
 
 
 @app.route("/getFarthestGraph", methods=["GET"])

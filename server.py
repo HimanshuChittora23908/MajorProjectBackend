@@ -12,6 +12,7 @@ model = None
 series = None
 cluster_series = None
 N_CLUSTERS = 8
+CLUSTER_INDEX = 8
 # Create an array named labels to store the labels of the clusters
 labels = np.zeros(N_CLUSTERS, dtype="int32")
 
@@ -65,12 +66,19 @@ def furtherCluster():
     global model
     global series
     global cluster_series
+    global CLUSTER_INDEX
 
     # receive integer parameter from request
     cluster_no = request.args.get("cluster_no")
 
     # further cluster the cluster represented by cluster_no into 2 clusters
     cluster_series = series[model.labels_ == int(cluster_no)]
+    print("cluster_series.shape = " + cluster_series.shape)
+
+    # store the indices of the elements where label is equal to cluster_no
+    indices = np.where(model.labels_ == int(cluster_no))[0]
+    print("indices.shape = " + indices.shape)
+
     cluster_model = TimeSeriesKMeans(
         n_clusters=2,
         metric="euclidean",
@@ -78,31 +86,36 @@ def furtherCluster():
         init="random",
     )
     cluster_y_pred = cluster_model.fit_predict(cluster_series)
-    max_cluster = 0
-    max_cluster_size = 0
-    for i in range(2):
-        if max_cluster_size < np.sum(cluster_y_pred == i):
-            max_cluster = i
-            max_cluster_size = np.sum(cluster_y_pred == i)
 
-    min_dist = np.inf
-    min_dist_row = 0
-    max_cluster = np.argmax(np.bincount(cluster_model.labels_))
-    for i in range(cluster_series.shape[0]):
-        if cluster_model.labels_[i] == max_cluster:
-            dist = np.linalg.norm(cluster_series[i] - cluster_model.cluster_centers_[max_cluster])
-            if dist < min_dist:
-                min_dist = dist
-                min_dist_row = i
+    # update the labels array
+    for i in range(cluster_y_pred.shape[0]):
+        if cluster_y_pred[i] == 0:
+            model.labels_[indices[i]] = cluster_no
+        else:
+            model.labels_[indices[i]] = CLUSTER_INDEX
+
+    CLUSTER_INDEX += 1
+    labels.resize(CLUSTER_INDEX, refcheck=False)
 
     response = jsonify(
         {
-            "expected_graph": min_dist_row,
+            "message": "success",
         }
     )
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
+
+@app.route("/getNoOfClusters", methods=["GET"])
+def getNoOfClusters():
+    # return the number of clusters by counting the distinct elements in model.labels_
+    response = jsonify(
+        {
+            "no_of_clusters": len(np.unique(model.labels_)),
+        }
+    )
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    return response
 
 
 @app.route("/getFarthestGraph", methods=["GET"])

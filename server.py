@@ -73,11 +73,9 @@ def furtherCluster():
 
     # further cluster the cluster represented by cluster_no into 2 clusters
     cluster_series = series[model.labels_ == int(cluster_no)]
-    print("cluster_series.shape = " + cluster_series.shape)
 
     # store the indices of the elements where label is equal to cluster_no
     indices = np.where(model.labels_ == int(cluster_no))[0]
-    print("indices.shape = " + indices.shape)
 
     cluster_model = TimeSeriesKMeans(
         n_clusters=2,
@@ -124,7 +122,7 @@ def getFarthestGraph():
     max_dist_row = 0
     graph_id = request.args.get("graph_id")
     max_cluster = np.argmax(np.bincount(model.labels_))
-    for i in range(series.shape[0]):
+    for i in range(series.shape[0]): # label of element `i` is stored in model.labels_[i]
         if model.labels_[i] == int(graph_id):
             dist = np.linalg.norm(series[i] - model.cluster_centers_[max_cluster])
             if dist > max_dist:
@@ -146,7 +144,7 @@ def getClosestGraph():
     min_dist_row = 0
     graph_id = request.args.get("graph_id")
     max_cluster = np.argmax(np.bincount(model.labels_))
-    for i in range(series.shape[0]):
+    for i in range(series.shape[0]): # label of element `i` is stored in model.labels_[i]
         if model.labels_[i] == int(graph_id):
             dist = np.linalg.norm(series[i] - model.cluster_centers_[max_cluster])
             if dist < min_dist:
@@ -165,7 +163,6 @@ def getClosestGraph():
 @app.route("/labelTrue", methods=["GET"])
 def labelTrue():
     global labels
-    print(labels)
     graph_id = request.args.get("graph_id")
     labels[int(graph_id)] = 1 # labelling true
     response = jsonify(
@@ -181,7 +178,6 @@ def labelTrue():
 @app.route("/labelFalse", methods=["GET"])
 def labelFalse():
     global labels
-    print(labels)
     graph_id = request.args.get("graph_id")
     labels[int(graph_id)] = 0 # labelling false
     response = jsonify(

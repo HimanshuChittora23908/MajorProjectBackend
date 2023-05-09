@@ -1,4 +1,6 @@
 venv_majorproject
 help.txt
 KMeans.ipynb
+Outlier.ipynb
 __pycache__/
+__pycache__

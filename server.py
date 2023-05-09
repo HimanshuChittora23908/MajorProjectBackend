@@ -13,7 +13,7 @@ series = None
 cluster_series = None
 N_CLUSTERS = 8
 CLUSTER_INDEX = 8
-# Create an array named labels to store the labels of the clusters
+# Create an array named labels to store the labels of the clusters and initialize it with -1
 labels = np.zeros(N_CLUSTERS, dtype="int32")
 
 
@@ -60,6 +60,7 @@ def hello():
     )
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
+
 
 @app.route("/furtherCluster", methods=["POST"])
 def furtherCluster():
@@ -122,7 +123,9 @@ def getFarthestGraph():
     max_dist_row = 0
     graph_id = request.args.get("graph_id")
     max_cluster = np.argmax(np.bincount(model.labels_))
-    for i in range(series.shape[0]): # label of element `i` is stored in model.labels_[i]
+    for i in range(
+        series.shape[0]
+    ):  # label of element `i` is stored in model.labels_[i]
         if model.labels_[i] == int(graph_id):
             dist = np.linalg.norm(series[i] - model.cluster_centers_[max_cluster])
             if dist > max_dist:
@@ -144,7 +147,9 @@ def getClosestGraph():
     min_dist_row = 0
     graph_id = request.args.get("graph_id")
     max_cluster = np.argmax(np.bincount(model.labels_))
-    for i in range(series.shape[0]): # label of element `i` is stored in model.labels_[i]
+    for i in range(
+        series.shape[0]
+    ):  # label of element `i` is stored in model.labels_[i]
         if model.labels_[i] == int(graph_id):
             dist = np.linalg.norm(series[i] - model.cluster_centers_[max_cluster])
             if dist < min_dist:
@@ -164,7 +169,7 @@ def getClosestGraph():
 def labelTrue():
     global labels
     graph_id = request.args.get("graph_id")
-    labels[int(graph_id)] = 1 # labelling true
+    labels[int(graph_id)] = 1  # labelling true
     response = jsonify(
         {
             "success": True,
@@ -179,7 +184,7 @@ def labelTrue():
 def labelFalse():
     global labels
     graph_id = request.args.get("graph_id")
-    labels[int(graph_id)] = 0 # labelling false
+    labels[int(graph_id)] = 0  # labelling false
     response = jsonify(
         {
             "success": True,
@@ -187,6 +192,40 @@ def labelFalse():
     )
     response.headers.add("Access-Control-Allow-Origin", "*")
     print(labels)
+    return response
+
+
+@app.route("/getSeries", methods=["GET"])
+def getSeries():
+    global series
+    global model
+    global labels
+    global cluster_series
+    global CLUSTER_INDEX
+
+    # return the number of clusters by counting the distinct elements in model.labels_
+    response = jsonify(
+        {
+            "series": series.tolist() if series is not None else [],
+        }
+    )
+    print(len(series))
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    return response
+
+
+# route to get the label as true if cluster has label 1 with there graph id
+@app.route("/getLabelGraphId", methods=["GET"])
+def getLabelGraphId():
+    global labels
+    response = jsonify(
+        {
+            "labels": labels.tolist() if labels is not None else [],
+            "cluster_id": model.labels_.tolist() if model.labels_ is not None else [],
+            "graph_id": np.arange(len(labels)).tolist(),
+        }
+    )
+    response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
 

@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 from tslearn.clustering import TimeSeriesKMeans
 from statistics import mode
+from sklearn.neighbors import LocalOutlierFactor
 
 app = Flask(__name__)
 
@@ -27,8 +28,17 @@ def hello():
     data = request.files["file"]
     data = pd.read_csv(data, sep=",")
     data = data.iloc[:, :]
+    normalized_data = (data - data.mean()) / data.std()
+    normalized_data.dropna(inplace=True)
+    model = LocalOutlierFactor(n_neighbors=20, contamination=0.2)
+    model.fit(normalized_data)
+    outlier_status = model.fit_predict(normalized_data)
+    outlier_indices = normalized_data.index[outlier_status == -1]
     data = np.array(data, dtype="float32")
     series = data[:, 1:]
+    print(series.shape, "before outlier removal")
+    series = np.delete(series, outlier_indices, axis=0)
+    print(series.shape, "after outlier removal")
     model = TimeSeriesKMeans(
         n_clusters=N_CLUSTERS,
         metric="euclidean",
@@ -120,7 +130,7 @@ def getNoOfClusters():
 @app.route("/getFarthestGraph", methods=["GET"])
 def getFarthestGraph():
     max_dist = 0
-    max_dist_row = 0
+    max_dist_row = -1
     graph_id = request.args.get("graph_id")
     max_cluster = np.argmax(np.bincount(model.labels_))
     for i in range(

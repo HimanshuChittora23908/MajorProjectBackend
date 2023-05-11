@@ -2,5 +2,7 @@ venv_majorproject
 help.txt
 KMeans.ipynb
 Outlier.ipynb
+PeaksnValleys.ipynb
+peaks.txt
 __pycache__/
 __pycache__

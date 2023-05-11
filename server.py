@@ -12,6 +12,8 @@ app = Flask(__name__)
 model = None
 series = None
 cluster_series = None
+outlier_indices = None
+original_length = 0
 N_CLUSTERS = 8
 CLUSTER_INDEX = 8
 # Create an array named labels to store the labels of the clusters and initialize it with -1
@@ -23,19 +25,25 @@ def hello():
     global model
     global series
     global N_CLUSTERS
+    global outlier_indices
+    global original_length
 
     # Receive the data from the client where content-type is multipart/form-data
     data = request.files["file"]
     data = pd.read_csv(data, sep=",")
     data = data.iloc[:, :]
+
     normalized_data = (data - data.mean()) / data.std()
     normalized_data.dropna(inplace=True)
+
     model = LocalOutlierFactor(n_neighbors=20, contamination=0.2)
     model.fit(normalized_data)
     outlier_status = model.fit_predict(normalized_data)
     outlier_indices = normalized_data.index[outlier_status == -1]
+
     data = np.array(data, dtype="float32")
     series = data[:, 1:]
+    original_length = series.shape[0]
     print(series.shape, "before outlier removal")
     series = np.delete(series, outlier_indices, axis=0)
     print(series.shape, "after outlier removal")
@@ -228,10 +236,21 @@ def getSeries():
 @app.route("/getLabelGraphId", methods=["GET"])
 def getLabelGraphId():
     global labels
+    # series array has some removed elements that are present in outlier_indices and the clustering was done on this series array
+    # generate cluster_id array using model.labels_ such that cluster_id[i] = -1 if element i is present in outlier_indices and the remaining elements with model.labels_[i], where i is not present in outlier_indices
+    cluster_id = np.zeros(original_length, dtype=int)
+    n_outliers = 0
+    for i in range(original_length):
+        if i in outlier_indices:
+            cluster_id[i] = -1
+            n_outliers += 1
+        else:
+            cluster_id[i] = model.labels_[i - n_outliers]
+
     response = jsonify(
         {
             "labels": labels.tolist() if labels is not None else [],
-            "cluster_id": model.labels_.tolist() if model.labels_ is not None else [],
+            "cluster_id": cluster_id.tolist(),
             "graph_id": np.arange(len(labels)).tolist(),
         }
     )

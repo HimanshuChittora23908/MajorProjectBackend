@@ -27,6 +27,11 @@ def hello():
     global N_CLUSTERS
     global outlier_indices
     global original_length
+    global labels
+    global CLUSTER_INDEX
+
+    labels = np.zeros(N_CLUSTERS, dtype="int32")
+    CLUSTER_INDEX = N_CLUSTERS
 
     # Receive the data from the client where content-type is multipart/form-data
     data = request.files["file"]

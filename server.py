@@ -6,6 +6,7 @@ from sklearn.cluster import KMeans
 from tslearn.clustering import TimeSeriesKMeans
 from statistics import mode
 from sklearn.neighbors import LocalOutlierFactor
+from scipy.signal import find_peaks
 
 app = Flask(__name__)
 
@@ -14,8 +15,8 @@ series = None
 cluster_series = None
 outlier_indices = None
 original_length = 0
-N_CLUSTERS = 8
-CLUSTER_INDEX = 8
+N_CLUSTERS = 3
+CLUSTER_INDEX = 3
 # Create an array named labels to store the labels of the clusters and initialize it with -1
 labels = np.zeros(N_CLUSTERS, dtype="int32")
 
@@ -38,25 +39,40 @@ def hello():
     data = pd.read_csv(data, sep=",")
     data = data.iloc[:, :]
 
-    normalized_data = (data - data.mean()) / data.std()
-    normalized_data.dropna(inplace=True)
+    # normalized_data = (data - data.mean()) / data.std()
+    # normalized_data.dropna(inplace=True)
 
-    model = LocalOutlierFactor(n_neighbors=20, contamination=0.2)
-    model.fit(normalized_data)
-    outlier_status = model.fit_predict(normalized_data)
-    outlier_indices = normalized_data.index[outlier_status == -1]
+    # model = LocalOutlierFactor(n_neighbors=20, contamination=0.2)
+    # model.fit(normalized_data)
+    # outlier_status = model.fit_predict(normalized_data)
+    # outlier_indices = normalized_data.index[outlier_status == -1]
 
     data = np.array(data, dtype="float32")
     series = data[:, 1:]
+
+    series = np.diff(series, axis=0)
+
+    series = series - np.mean(series, axis=0)
+    series = series / np.std(series, axis=0)
+
+    # Find the peaks
+    peaks, _ = find_peaks(series[:, 0], height=0.1, distance=10)
+    graph_less_than_4_peaks = []
+    for i in range(series.shape[0]):
+        peaks, _ = find_peaks(series[i, :], height=0.1, distance=10)
+        if len(peaks) < 4:
+            graph_less_than_4_peaks.append(i)
+    series = np.delete(series, np.flipud(graph_less_than_4_peaks), axis=0)
+
+    model = LocalOutlierFactor(n_neighbors=20, contamination=0.2)
+    outlier_status = model.fit_predict(series)
+    outlier_indices = np.where(outlier_status == -1)[0]
     original_length = series.shape[0]
-    print(series.shape, "before outlier removal")
     series = np.delete(series, outlier_indices, axis=0)
-    print(series.shape, "after outlier removal")
+
     model = TimeSeriesKMeans(
         n_clusters=N_CLUSTERS,
         metric="euclidean",
-        random_state=41,
-        init="random",
     )
     y_pred = model.fit_predict(series)
     max_cluster = 0
@@ -124,6 +140,7 @@ def furtherCluster():
             "message": "success",
         }
     )
+    print(labels)
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
@@ -136,6 +153,7 @@ def getNoOfClusters():
             "no_of_clusters": len(np.unique(model.labels_)),
         }
     )
+    print(labels)
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
@@ -160,6 +178,7 @@ def getFarthestGraph():
             "farthest_graph": max_dist_row,
         }
     )
+    print(labels)
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
@@ -184,6 +203,7 @@ def getClosestGraph():
             "closest_graph": min_dist_row,
         }
     )
+    print(labels)
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
@@ -198,8 +218,8 @@ def labelTrue():
             "success": True,
         }
     )
-    response.headers.add("Access-Control-Allow-Origin", "*")
     print(labels)
+    response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
 
@@ -213,8 +233,8 @@ def labelFalse():
             "success": True,
         }
     )
-    response.headers.add("Access-Control-Allow-Origin", "*")
     print(labels)
+    response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
 
@@ -232,7 +252,6 @@ def getSeries():
             "series": series.tolist() if series is not None else [],
         }
     )
-    print(len(series))
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 

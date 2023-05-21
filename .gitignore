@@ -1,8 +1,5 @@
 venv_majorproject
 help.txt
-KMeans.ipynb
-Outlier.ipynb
-PeaksnValleys.ipynb
-peaks.txt
+pythonNotebooks
 __pycache__/
 __pycache__

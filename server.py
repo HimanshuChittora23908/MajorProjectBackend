@@ -7,6 +7,7 @@ from tslearn.clustering import TimeSeriesKMeans
 from statistics import mode
 from sklearn.neighbors import LocalOutlierFactor
 from scipy.signal import find_peaks
+import json
 
 app = Flask(__name__)
 
@@ -22,6 +23,7 @@ CLUSTER_INDEX = 3
 labels = np.zeros(N_CLUSTERS, dtype="int32")
 indexes_array = []
 indexes_array_backup = []
+reference_graph = None
 
 
 @app.route("/upload", methods=["POST"])
@@ -34,6 +36,7 @@ def hello():
     global labels
     global CLUSTER_INDEX
     global indexes_array
+    global reference_graph
 
     labels = np.zeros(N_CLUSTERS, dtype="int32")
     # labels = np.full(N_CLUSTERS, -1)
@@ -61,7 +64,7 @@ def hello():
     indexes_array_backup = indexes_array
 
     # Find the peaks
-    peaks, _ = find_peaks(series[:, 0], height=0.1, distance=10)
+    peaks, _ = find_peaks(series[:, 0], height=0.1, distance=10)  # redundant
     graph_less_than_4_peaks = []
     for i in range(series.shape[0]):
         peaks, _ = find_peaks(series[i, :], height=0.1, distance=10)
@@ -114,6 +117,7 @@ def hello():
                 min_dist_row = i
 
     print(min_dist_row)
+    reference_graph = series[min_dist_row]
 
     response = jsonify(
         {
@@ -181,6 +185,7 @@ def getNoOfClusters():
 
 @app.route("/getFarthestGraph", methods=["GET"])
 def getFarthestGraph():
+    print("getFarthestGraph call: ", len(series))
     max_dist = 0
     max_dist_row = -1
     graph_id = request.args.get("graph_id")
@@ -194,9 +199,24 @@ def getFarthestGraph():
                 max_dist = dist
                 max_dist_row = i
 
+    # farthest_graph stored at index max_dist_row
+    peaks, properties = find_peaks(series[max_dist_row], height=0.1, distance=10)
+
+    # find valleys at index max_dist_row with depth at least 0.1
+    valleys, properties2 = find_peaks(-series[max_dist_row], height=0.1, distance=10)
+
+    # calculate the euclidean distance between the farthest_graph and the reference_graph
+    dist = np.linalg.norm(series[max_dist_row] - reference_graph)
+
+    # send peaks and properties along with farthest_graph to frontend
     response = jsonify(
         {
             "farthest_graph": indexes_array[max_dist_row],
+            "peaks": peaks.tolist(),
+            "peak_heights": properties["peak_heights"].tolist(),
+            "valleys": valleys.tolist(),
+            "valley_heights": properties2["peak_heights"].tolist(),
+            "euclidean_dist": json.dumps(str(dist)),
         }
     )
     print(labels)
@@ -206,6 +226,7 @@ def getFarthestGraph():
 
 @app.route("/getClosestGraph", methods=["GET"])
 def getClosestGraph():
+    print("getClosestGraph call: ", len(series))
     min_dist = np.inf
     min_dist_row = 0
     graph_id = request.args.get("graph_id")
@@ -219,9 +240,24 @@ def getClosestGraph():
                 min_dist = dist
                 min_dist_row = i
 
+    # closest_graph stored at index min_dist_row
+    peaks, properties = find_peaks(series[min_dist_row], height=0.1, distance=10)
+
+    # find valleys at index min_dist_row with depth at least 0.1
+    valleys, properties2 = find_peaks(-series[min_dist_row], height=0.1, distance=10)
+
+    # calculate the euclidean distance between the farthest_graph and the reference_graph
+    dist = np.linalg.norm(series[min_dist_row] - reference_graph)
+
+    # send peaks and properties along with closest_graph to frontend
     response = jsonify(
         {
             "closest_graph": min_dist_row,
+            "peaks": peaks.tolist(),
+            "peak_heights": properties["peak_heights"].tolist(),
+            "valleys": valleys.tolist(),
+            "valley_heights": properties2["peak_heights"].tolist(),
+            "euclidean_dist": json.dumps(str(dist)),
         }
     )
     print(labels)

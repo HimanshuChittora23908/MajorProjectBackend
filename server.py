@@ -37,6 +37,8 @@ def hello():
     global CLUSTER_INDEX
     global indexes_array
     global reference_graph
+    global indexes_array_backup
+    global series_backup
 
     labels = np.zeros(N_CLUSTERS, dtype="int32")
     # labels = np.full(N_CLUSTERS, -1)
@@ -88,15 +90,11 @@ def hello():
 
     indexes_array = list(set(indexes_array) & set(indexes_array_backup))
 
-    print(len(indexes_array))
-
     model = TimeSeriesKMeans(
         n_clusters=N_CLUSTERS,
         metric="euclidean",
     )
     y_pred = model.fit_predict(series_backup[indexes_array])
-    print(y_pred)
-    print(len(y_pred))
     max_cluster = 0
     max_cluster_size = 0
     for i in range(N_CLUSTERS):
@@ -116,12 +114,19 @@ def hello():
                 min_dist = dist
                 min_dist_row = i
 
-    print(min_dist_row)
     reference_graph = series[min_dist_row]
+
+    peaks, properties = find_peaks(series[min_dist_row], height=0.1, distance=10)
+
+    valleys, properties2 = find_peaks(-series[min_dist_row], height=0.1, distance=10)
 
     response = jsonify(
         {
             "expected_graph": indexes_array[min_dist_row],
+            "peaks": peaks.tolist(),
+            "peak_heights": properties["peak_heights"].tolist(),
+            "valleys": valleys.tolist(),
+            "valley_heights": properties2["peak_heights"].tolist(),
         }
     )
     response.headers.add("Access-Control-Allow-Origin", "*")
@@ -185,7 +190,6 @@ def getNoOfClusters():
 
 @app.route("/getFarthestGraph", methods=["GET"])
 def getFarthestGraph():
-    print("getFarthestGraph call: ", len(series))
     max_dist = 0
     max_dist_row = -1
     graph_id = request.args.get("graph_id")
@@ -211,7 +215,9 @@ def getFarthestGraph():
     # send peaks and properties along with farthest_graph to frontend
     response = jsonify(
         {
-            "farthest_graph": indexes_array[max_dist_row],
+            "farthest_graph": max_dist_row
+            if max_dist_row == -1
+            else indexes_array[max_dist_row],
             "peaks": peaks.tolist(),
             "peak_heights": properties["peak_heights"].tolist(),
             "valleys": valleys.tolist(),
@@ -226,7 +232,6 @@ def getFarthestGraph():
 
 @app.route("/getClosestGraph", methods=["GET"])
 def getClosestGraph():
-    print("getClosestGraph call: ", len(series))
     min_dist = np.inf
     min_dist_row = 0
     graph_id = request.args.get("graph_id")
@@ -317,16 +322,24 @@ def getSeries():
 @app.route("/getLabelGraphId", methods=["GET"])
 def getLabelGraphId():
     global labels
-    # series array has some removed elements that are present in outlier_indices and the clustering was done on this series array
-    # generate cluster_id array using model.labels_ such that cluster_id[i] = -1 if element i is present in outlier_indices and the remaining elements with model.labels_[i], where i is not present in outlier_indices
-    cluster_id = np.zeros(original_length, dtype=int)
-    n_outliers = 0
-    for i in range(original_length):
-        if i in outlier_indices:
-            cluster_id[i] = -1
-            n_outliers += 1
-        else:
-            cluster_id[i] = model.labels_[i - n_outliers]
+    global indexes_array
+    global original_length
+    global series_backup
+
+    # Initialize cluster_id array with an array of -1 of length equal to the original length of the series
+    cluster_id = np.full(len(series_backup), -1)
+    print(model.labels_)
+    for i in range(len(cluster_id)):
+        if i in indexes_array:
+            # label that cluster as 1 if the cluster has label 1 else label it as 0
+            if labels[model.labels_[indexes_array.index(i)]] == 1:
+                cluster_id[i] = 1
+            else:
+                cluster_id[i] = 0
+
+    print("Labels: ", labels)
+    print("Cluster ID: ", cluster_id)
+    # print(indexes_array)
 
     response = jsonify(
         {

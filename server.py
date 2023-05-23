@@ -12,6 +12,7 @@ app = Flask(__name__)
 
 model = None
 series = None
+series_backup = None
 cluster_series = None
 outlier_indices = None
 original_length = 0
@@ -19,6 +20,8 @@ N_CLUSTERS = 3
 CLUSTER_INDEX = 3
 # Create an array named labels to store the labels of the clusters and initialize it with -1
 labels = np.zeros(N_CLUSTERS, dtype="int32")
+indexes_array = []
+indexes_array_backup = []
 
 
 @app.route("/upload", methods=["POST"])
@@ -30,8 +33,10 @@ def hello():
     global original_length
     global labels
     global CLUSTER_INDEX
+    global indexes_array
 
     labels = np.zeros(N_CLUSTERS, dtype="int32")
+    # labels = np.full(N_CLUSTERS, -1)
     CLUSTER_INDEX = N_CLUSTERS
 
     # Receive the data from the client where content-type is multipart/form-data
@@ -39,21 +44,21 @@ def hello():
     data = pd.read_csv(data, sep=",")
     data = data.iloc[:, :]
 
-    # normalized_data = (data - data.mean()) / data.std()
-    # normalized_data.dropna(inplace=True)
-
-    # model = LocalOutlierFactor(n_neighbors=20, contamination=0.2)
-    # model.fit(normalized_data)
-    # outlier_status = model.fit_predict(normalized_data)
-    # outlier_indices = normalized_data.index[outlier_status == -1]
+    # Push all indices into indexes_array
+    for i in range(data.shape[0]):
+        indexes_array.append(i)
 
     data = np.array(data, dtype="float32")
-    series = data[:, 1:]
+    series = data[:, :]
 
-    series = np.diff(series, axis=0)
+    # Calculate derivative of the series data retaining the same shape
+    series = np.gradient(series, axis=0)
 
     series = series - np.mean(series, axis=0)
     series = series / np.std(series, axis=0)
+
+    series_backup = series
+    indexes_array_backup = indexes_array
 
     # Find the peaks
     peaks, _ = find_peaks(series[:, 0], height=0.1, distance=10)
@@ -63,18 +68,32 @@ def hello():
         if len(peaks) < 4:
             graph_less_than_4_peaks.append(i)
     series = np.delete(series, np.flipud(graph_less_than_4_peaks), axis=0)
+    # Remove peak indices from indexes_array
+    for i in range(len(graph_less_than_4_peaks)):
+        indexes_array.remove(graph_less_than_4_peaks[i])
 
+    # Remove outliers
     model = LocalOutlierFactor(n_neighbors=20, contamination=0.2)
-    outlier_status = model.fit_predict(series)
-    outlier_indices = np.where(outlier_status == -1)[0]
-    original_length = series.shape[0]
-    series = np.delete(series, outlier_indices, axis=0)
+    series_temp = np.zeros((len(indexes_array), series.shape[1]))
+    for i in range(len(indexes_array)):
+        series_temp[i] = series_backup[indexes_array[i]]
+    model.fit(series_temp)
+    outlier_indices = np.where(model.fit_predict(series_temp) == -1)[0]
+    indexes_array_backup = list(indexes_array_backup)
+    for i in range(len(outlier_indices)):
+        indexes_array_backup.remove(indexes_array[outlier_indices[i]])
+
+    indexes_array = list(set(indexes_array) & set(indexes_array_backup))
+
+    print(len(indexes_array))
 
     model = TimeSeriesKMeans(
         n_clusters=N_CLUSTERS,
         metric="euclidean",
     )
-    y_pred = model.fit_predict(series)
+    y_pred = model.fit_predict(series_backup[indexes_array])
+    print(y_pred)
+    print(len(y_pred))
     max_cluster = 0
     max_cluster_size = 0
     for i in range(N_CLUSTERS):
@@ -85,16 +104,20 @@ def hello():
     min_dist = np.inf
     min_dist_row = 0
     max_cluster = np.argmax(np.bincount(model.labels_))
-    for i in range(series.shape[0]):
+    for i in range(len(indexes_array)):
         if model.labels_[i] == max_cluster:
-            dist = np.linalg.norm(series[i] - model.cluster_centers_[max_cluster])
+            dist = np.linalg.norm(
+                series_backup[i] - model.cluster_centers_[max_cluster]
+            )
             if dist < min_dist:
                 min_dist = dist
                 min_dist_row = i
 
+    print(min_dist_row)
+
     response = jsonify(
         {
-            "expected_graph": min_dist_row,
+            "expected_graph": indexes_array[min_dist_row],
         }
     )
     response.headers.add("Access-Control-Allow-Origin", "*")
@@ -112,7 +135,7 @@ def furtherCluster():
     cluster_no = request.args.get("cluster_no")
 
     # further cluster the cluster represented by cluster_no into 2 clusters
-    cluster_series = series[model.labels_ == int(cluster_no)]
+    cluster_series = series[np.where(model.labels_ == int(cluster_no))[0]]
 
     # store the indices of the elements where label is equal to cluster_no
     indices = np.where(model.labels_ == int(cluster_no))[0]
@@ -120,8 +143,6 @@ def furtherCluster():
     cluster_model = TimeSeriesKMeans(
         n_clusters=2,
         metric="euclidean",
-        random_state=41,
-        init="random",
     )
     cluster_y_pred = cluster_model.fit_predict(cluster_series)
 
@@ -165,7 +186,7 @@ def getFarthestGraph():
     graph_id = request.args.get("graph_id")
     max_cluster = np.argmax(np.bincount(model.labels_))
     for i in range(
-        series.shape[0]
+        len(model.labels_)
     ):  # label of element `i` is stored in model.labels_[i]
         if model.labels_[i] == int(graph_id):
             dist = np.linalg.norm(series[i] - model.cluster_centers_[max_cluster])
@@ -175,7 +196,7 @@ def getFarthestGraph():
 
     response = jsonify(
         {
-            "farthest_graph": max_dist_row,
+            "farthest_graph": indexes_array[max_dist_row],
         }
     )
     print(labels)
@@ -190,7 +211,7 @@ def getClosestGraph():
     graph_id = request.args.get("graph_id")
     max_cluster = np.argmax(np.bincount(model.labels_))
     for i in range(
-        series.shape[0]
+        len(model.labels_)
     ):  # label of element `i` is stored in model.labels_[i]
         if model.labels_[i] == int(graph_id):
             dist = np.linalg.norm(series[i] - model.cluster_centers_[max_cluster])
